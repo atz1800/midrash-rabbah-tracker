@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="מעקב מדרש רבה">
+<meta name="theme-color" content="#1a2d6e">
+<title>מעקב מדרש רבה</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700;900&family=Heebo:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://unpkg.com/@hebcal/core@5.7.0/dist/bundle.min.js"></script>
+
+<script type="module" id="fb-init">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBiEfJgr_wyq33GpG5pHo37DXqKnrDYivo",
+    authDomain: "shas-tracker.firebaseapp.com",
+    projectId: "shas-tracker",
+    storageBucket: "shas-tracker.firebasestorage.app",
+    messagingSenderId: "701822975947",
+    appId: "1:701822975947:web:6c93f2ec397f70d3c1004e"
+  };
+
+  const app = initializeApp(firebaseConfig, 'midrash-app');
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+
+  window._fb = { auth, db, provider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, doc, setDoc, getDoc };
+</script>
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Heebo', sans-serif; background: #f2f5fc; }
+
+.par-cell {
+  width: 44px; height: 40px; border-radius: 7px;
+  border: 1.5px solid #d8e0f0; background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; cursor: pointer;
+  transition: all 0.12s; user-select: none;
+  position: relative; gap: 1px;
+  box-shadow: 0 1px 3px rgba(30,45,90,0.06);
+}
+.par-cell:hover { border-color: #4a67c8; background: #eef1ff; transform: scale(1.08); z-index: 2; }
+.par-cell.learned { background: #dde6ff; border-color: #4a67c8; box-shadow: 0 1px 5px rgba(74,103,200,0.18); }
+.par-cell.flash { transform: scale(1.22); background: #b8caff; }
+.par-num { font-size: 0.75rem; font-weight: 700; color: #1e2d5a; line-height: 1; font-family: 'Frank Ruhl Libre', serif; }
+.par-cell.learned .par-num { color: #2e4080; }
+.par-sflink {
+  position: absolute; bottom: 2px; right: 3px;
+  font-size: 0.42rem; color: #b0bcdc; text-decoration: none;
+  line-height: 1; transition: color 0.15s; font-family: 'Heebo', sans-serif;
+}
+.par-cell:hover .par-sflink { color: #4a67c8; }
+.par-cell.learned .par-sflink { color: #8899cc; }
+
+.thdr:hover { background: #f5f7ff; }
+input:focus, textarea:focus { outline: none; }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: #b0bcdc; border-radius: 3px; }
+
+.journal-entry { background: #fff; border: 1.5px solid #d8e0f0; border-radius: 10px; padding: 1rem; margin-bottom: 0.7rem; }
+.journal-entry:hover .entry-actions { opacity: 1; }
+.entry-actions { opacity: 0; transition: opacity 0.15s; display: flex; gap: 0.4rem; }
+.entry-btn { background: none; border: none; cursor: pointer; font-size: 0.8rem; padding: 0.2rem 0.4rem; border-radius: 4px; color: #8899bb; transition: all 0.12s; }
+.entry-btn:hover { background: #eef1ff; color: #3a4f7a; }
+.entry-btn.del:hover { background: #fff0f0; color: #8b2020; }
+.mbtn { padding: 0.28rem 0.65rem; border-radius: 6px; cursor: pointer; font-family: 'Heebo', sans-serif; font-size: 0.72rem; font-weight: 500; transition: all 0.15s; border: none; }
+.tab-btn { padding: 0.5rem 1.1rem; border: none; background: transparent; cursor: pointer; font-family: 'Heebo', sans-serif; font-size: 0.88rem; font-weight: 500; border-bottom: 2px solid transparent; transition: all 0.15s; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+/* ══════════════════════════════════
+   נתוני מדרש רבה
+══════════════════════════════════ */
+const GROUPS = [
+  {
+    name: 'חמישה חומשי תורה',
+    books: [
+      { id: 'bereishit', name: 'בראשית רבה',    n: 100, sid: 'Bereishit_Rabbah',     ws: 'בראשית_רבה' },
+      { id: 'shemot',   name: 'שמות רבה',        n: 52,  sid: 'Shemot_Rabbah',        ws: 'שמות_רבה'   },
+      { id: 'vayikra',  name: 'ויקרא רבה',       n: 37,  sid: 'Vayikra_Rabbah',       ws: 'ויקרא_רבה'  },
+      { id: 'bamidbar', name: 'במדבר רבה',       n: 23,  sid: 'Bamidbar_Rabbah',      ws: 'במדבר_רבה'  },
+      { id: 'devarim',  name: 'דברים רבה',       n: 11,  sid: 'Devarim_Rabbah',       ws: 'דברים_רבה'  },
+    ]
+  },
+  {
+    name: 'חמש מגילות',
+    books: [
+      { id: 'shir',     name: 'שיר השירים רבה', n: 8,   sid: 'Song_of_Songs_Rabbah', ws: 'שיר_השירים_רבה' },
+      { id: 'ruth',     name: 'רות רבה',         n: 8,   sid: 'Ruth_Rabbah',          ws: 'רות_רבה'        },
+      { id: 'eicha',    name: 'איכה רבה',        n: 5,   sid: 'Lamentations_Rabbah',  ws: 'איכה_רבה'       },
+      { id: 'kohelet',  name: 'קהלת רבה',        n: 12,  sid: 'Kohelet_Rabbah',       ws: 'קהלת_רבה'       },
+      { id: 'esther',   name: 'אסתר רבה',        n: 10,  sid: 'Esther_Rabbah',        ws: 'אסתר_רבה'       },
+    ]
+  }
+];
+const ALL_BOOKS = GROUPS.flatMap(g => g.books);
+const TOTAL = ALL_BOOKS.reduce((s, b) => s + b.n, 0); // 266
+
+const HEB = ['','א','ב','ג','ד','ה','ו','ז','ח','ט','י','יא','יב','יג','יד','טו','טז','יז','יח','יט','כ','כא','כב','כג','כד','כה','כו','כז','כח','כט','ל','לא','לב','לג','לד','לה','לו','לז','לח','לט','מ','מא','מב','מג','מד','מה','מו','מז','מח','מט','נ','נא','נב','נג','נד','נה','נו','נז','נח','נט','ס','סא','סב','סג','סד','סה','סו','סז','סח','סט','ע','עא','עב','עג','עד','עה','עו','עז','עח','עט','פ','פא','פב','פג','פד','פה','פו','פז','פח','פט','צ','צא','צב','צג','צד','צה','צו','צז','צח','צט','ק'];
+
+const QUOTE = 'אָמַר רַבִּי יִצְחָק: אִם יֹאמַר לְךָ אָדָם — אַיֵּה אֱלֹהֶיךָ? אֱמֹר לוֹ: בִּלְבָבִי. שֶׁנֶּאֱמַר: "אֱלֹהַי בּוֹ אֶבְטָח". לְפִיכָךְ, כָּל הָעוֹסֵק בַּתּוֹרָה — כְּאִלּוּ בָּנָה עוֹלָמוֹת.';
+const QUOTE_SRC = '— מדרש בראשית רבה';
+
+/* ══════════════════════════════════
+   HELPERS
+══════════════════════════════════ */
+const pk = (bookId, num) => bookId + '||' + num;
+const sfUrl = (sid, num) => 'https://www.sefaria.org/' + sid + '.' + num;
+const wkUrl = ws => 'https://he.wikisource.org/wiki/' + ws;
+
+function today() {
+  return new Date().toLocaleDateString('he-IL', { day:'numeric', month:'numeric', year:'numeric' });
+}
+
+function hebrewBirthdayInYear(birthDate, targetYear) {
+  try {
+    const hebcal = window.Hebcal || window.hebcal;
+    if (!hebcal) return null;
+    const birthHeb = new hebcal.HDate(birthDate);
+    const targetGregorianApprox = new Date(targetYear, 5, 1);
+    const targetHebYear = new hebcal.HDate(targetGregorianApprox).getFullYear();
+    const bdayThisYear = new hebcal.HDate(birthHeb.getDate(), birthHeb.getMonth(), targetHebYear);
+    return { hebrew: bdayThisYear.render('he'), gregorian: bdayThisYear.greg() };
+  } catch(e) { return null; }
+}
+
+/* ══════════════════════════════════
+   FIREBASE
+══════════════════════════════════ */
+async function fbSave(uid, key, val) {
+  try {
+    const { db, doc, setDoc } = window._fb;
+    const stored = typeof val === 'string' ? val : JSON.stringify(val);
+    await setDoc(doc(db, 'users', uid), { [key]: stored }, { merge: true });
+  } catch(e) { console.error('save error', e); }
+}
+
+async function fbLoad(uid) {
+  try {
+    const { db, doc, getDoc } = window._fb;
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists()) return snap.data();
+  } catch(e) { console.error('load error', e); }
+  return {};
+}
+
+/* ══════════════════════════════════
+   APP
+══════════════════════════════════ */
+function App() {
+  const [user, setUser]         = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [learned, setLearned]   = useState({});
+  const [journal, setJournal]   = useState([]);
+  const [openCards, setOpenCards] = useState({});
+  const [search, setSearch]     = useState('');
+  const [flash, setFlash]       = useState(null);
+  const [tab, setTab]           = useState('midrash');
+  const [newEntry, setNewEntry] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [targetDate, setTargetDate] = useState(null);
+  const [ageInput, setAgeInput] = useState('');
+  const [birthInput, setBirthInput] = useState('');
+  const saveTimer = useRef(null);
+
+  useEffect(() => {
+    const { auth, onAuthStateChanged, getRedirectResult } = window._fb;
+    getRedirectResult(auth).catch(() => {});
+    return onAuthStateChanged(auth, async u => {
+      setUser(u);
+      if (u) {
+        const data = await fbLoad(u.uid);
+        try { setLearned(data['midrash-learned'] ? JSON.parse(data['midrash-learned']) : {}); } catch(e) { setLearned({}); }
+        try { setJournal(data['midrash-journal'] ? JSON.parse(data['midrash-journal']) : []); } catch(e) { setJournal([]); }
+        if (data['midrash-target']) {
+          const raw = data['midrash-target'];
+          setTargetDate(raw);
+          try {
+            const o = JSON.parse(raw);
+            setAgeInput(String(o.age));
+            const b = o.birth || '';
+            setBirthInput(b.length === 7 ? b + '-01' : b);
+          } catch(e) {}
+        }
+        document.title = 'מעקב מדרש רבה · ' + (u.displayName || '');
+      }
+      setLoading(false);
+    });
+  }, []);
+
+  function signIn() {
+    const { auth, provider, signInWithPopup, signInWithRedirect } = window._fb;
+    signInWithPopup(auth, provider).catch(err => {
+      if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+        signInWithRedirect(auth, provider);
+      }
+    });
+  }
+
+  function signOutUser() {
+    const { auth, signOut } = window._fb;
+    signOut(auth);
+    setLearned({}); setJournal([]); setTargetDate(null);
+    setAgeInput(''); setBirthInput('');
+    document.title = 'מעקב מדרש רבה';
+  }
+
+  function togglePar(bookId, num) {
+    const k = pk(bookId, num);
+    const nl = { ...learned };
+    if (nl[k]) {
+      delete nl[k];
+    } else {
+      nl[k] = true;
+      setFlash(k); setTimeout(() => setFlash(null), 350);
+    }
+    setLearned(nl);
+    if (user) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => fbSave(user.uid, 'midrash-learned', nl), 800);
+    }
+  }
+
+  function markAll(bookId, n) {
+    const nl = { ...learned };
+    for (let i = 1; i <= n; i++) nl[pk(bookId, i)] = true;
+    setLearned(nl);
+    if (user) fbSave(user.uid, 'midrash-learned', nl);
+  }
+
+  function unmarkAll(bookId, n) {
+    const nl = { ...learned };
+    for (let i = 1; i <= n; i++) delete nl[pk(bookId, i)];
+    setLearned(nl);
+    if (user) fbSave(user.uid, 'midrash-learned', nl);
+  }
+
+  function countBook(bookId, n) {
+    let c = 0;
+    for (let i = 1; i <= n; i++) if (learned[pk(bookId, i)]) c++;
+    return c;
+  }
+
+  function addEntry() {
+    if (!newEntry.trim()) return;
+    const nj = [{ id: Date.now(), date: today(), text: newEntry.trim() }, ...journal];
+    setJournal(nj);
+    if (user) fbSave(user.uid, 'midrash-journal', nj);
+    setNewEntry('');
+  }
+
+  function deleteEntry(id) {
+    const nj = journal.filter(e => e.id !== id);
+    setJournal(nj);
+    if (user) fbSave(user.uid, 'midrash-journal', nj);
+  }
+
+  function saveEdit(id) {
+    const nj = journal.map(e => e.id === id ? { ...e, text: editText } : e);
+    setJournal(nj);
+    if (user) fbSave(user.uid, 'midrash-journal', nj);
+    setEditingId(null);
+  }
+
+  /* Stats */
+  const totalLearned = Object.keys(learned).length;
+  const pct = Math.round((totalLearned / TOTAL) * 100);
+  const remaining = TOTAL - totalLearned;
+  const doneBooks = ALL_BOOKS.filter(b => countBook(b.id, b.n) === b.n).length;
+
+  const targetObj = targetDate ? (() => { try { return JSON.parse(targetDate); } catch(e) { return null; } })() : null;
+  const TARGET = targetObj ? new Date(targetObj.date) : null;
+  const weeksLeft = TARGET ? Math.max(1, (TARGET - new Date()) / (7*24*60*60*1000)) : null;
+  const parshaPerWeek = weeksLeft ? (remaining / weeksLeft).toFixed(1) : null;
+
+  /* ─── LOADING ─── */
+  if (loading) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', flexDirection:'column', gap:'1rem', background:'#f2f5fc' }}>
+        <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'3rem', color:'#2a40a0' }}>מ</div>
+        <div style={{ color:'#7a8aaa', fontSize:'0.9rem' }}>טוען...</div>
+      </div>
+    );
+  }
+
+  /* ─── LOGIN ─── */
+  if (!user) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', flexDirection:'column', background:'linear-gradient(160deg,#0d1530 0%,#1a2d6e 50%,#2a40a0 100%)', padding:'2rem', textAlign:'center' }}>
+        <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'5rem', color:'#e8d870', fontWeight:900, lineHeight:1, marginBottom:'1rem', textShadow:'0 0 40px rgba(232,216,112,0.3)' }}>מ</div>
+        <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'2rem', color:'#e8f0ff', fontWeight:700, marginBottom:'0.6rem' }}>מעקב מדרש רבה</div>
+        <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'1.1rem', color:'#c8d8ff', marginBottom:'0.4rem', lineHeight:1.7 }}>
+          ברוך הבא לדף המעקב האישי שלך<br/>בדרכך ללמוד את כל מדרש רבה
+        </div>
+        <div style={{ fontSize:'1rem', color:'#e8c040', fontWeight:600, marginBottom:'3.5rem' }}>בעזרת השם</div>
+        <button onClick={signIn} style={{ background:'#fff', color:'#2a40a0', border:'none', borderRadius:12, padding:'0.85rem 2rem', fontFamily:"'Heebo',sans-serif", fontWeight:700, fontSize:'1rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.7rem', boxShadow:'0 4px 20px rgba(0,0,0,0.3)' }}>
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style={{ width:22, height:22 }} />
+          כניסה עם Google
+        </button>
+        <div style={{ marginTop:'5rem', fontSize:'0.72rem', color:'rgba(255,255,255,0.25)', fontFamily:"'Heebo',sans-serif" }}>נוצר ע"י עמיחי צדוק</div>
+      </div>
+    );
+  }
+
+  /* ─── MAIN APP ─── */
+  return (
+    <div dir="rtl" style={{ fontFamily:"'Heebo',sans-serif", background:'#f2f5fc', minHeight:'100vh', color:'#1a2340' }}>
+
+      {/* HEADER */}
+      <div style={{ background:'linear-gradient(135deg,#1a2d6e 0%,#2a40a0 100%)', boxShadow:'0 3px 20px rgba(20,40,100,0.3)', position:'sticky', top:0, zIndex:100 }}>
+        <div style={{ padding:'0.9rem 1.2rem 0.5rem', maxWidth:1080, margin:'0 auto', display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:'0.6rem' }}>
+          <div>
+            <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'1.3rem', fontWeight:900, color:'#e8f0ff', lineHeight:1.15 }}>מעקב מדרש רבה · {user?.displayName || ''}</div>
+            <div style={{ fontSize:'0.72rem', color:'#e8c040', fontWeight:600, marginTop:'0.2rem' }}>בעזרת ה׳ — תתחזק, אתה תצליח ✨</div>
+          </div>
+
+          <div style={{ display:'flex', gap:'1.2rem', alignItems:'center', flexWrap:'wrap' }}>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'1.4rem', fontWeight:700, color:'#e8d870', lineHeight:1 }}>{totalLearned}</div>
+              <div style={{ fontSize:'0.6rem', color:'#7a90cc' }}>פרשיות</div>
+            </div>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'1.4rem', fontWeight:700, color:'#e8d870', lineHeight:1 }}>{doneBooks}</div>
+              <div style={{ fontSize:'0.6rem', color:'#7a90cc' }}>ספרים</div>
+            </div>
+            <div style={{ width:140 }}>
+              <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:99, height:7, overflow:'hidden', marginBottom:'0.25rem' }}>
+                <div style={{ height:'100%', width:pct+'%', background:'linear-gradient(90deg,#c8a010,#e8d870)', borderRadius:99, transition:'width 0.5s' }} />
+              </div>
+              <div style={{ fontSize:'0.66rem', color:'#7a90cc', display:'flex', justifyContent:'space-between' }}>
+                <span style={{ color:'#e8d870', fontWeight:700, fontSize:'0.78rem' }}>{pct}%</span>
+                <span>מכל מדרש רבה</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quote */}
+        <div onClick={() => setQuoteOpen(q => !q)} style={{ background:'rgba(0,0,0,0.18)', borderTop:'1px solid rgba(255,255,255,0.08)', padding:'0.5rem 1.2rem', cursor:'pointer' }}>
+          <div style={{ maxWidth:1080, margin:'0 auto', display:'flex', alignItems:'flex-start', gap:'0.8rem', justifyContent:'space-between' }}>
+            <div style={{ fontFamily:"'Frank Ruhl Libre',serif", color:'#c8d8ff', fontSize:'1rem', lineHeight:1.8, flex:1, overflow:'hidden' }}>
+              {quoteOpen
+                ? <span>״{QUOTE}״<br/><span style={{ fontSize:'0.78rem', color:'#e8c040', fontFamily:"'Heebo',sans-serif" }}>{QUOTE_SRC}</span></span>
+                : <span style={{ display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>״{QUOTE}״</span>
+              }
+            </div>
+            <span style={{ fontSize:'0.65rem', color:'#e8c040', fontFamily:"'Heebo',sans-serif", fontWeight:600, whiteSpace:'nowrap', paddingTop:'0.15rem' }}>{quoteOpen ? '▲' : '▼ הרחב'}</span>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:'flex', maxWidth:1080, margin:'0 auto', padding:'0 1.2rem', borderBottom:'1px solid rgba(255,255,255,0.08)', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex' }}>
+            {[['midrash','📖 מעקב למידה'],['journal','📝 יומן'],['target','🎯 יעד']].map(([key, label]) => (
+              <button key={key} className="tab-btn" onClick={() => setTab(key)}
+                style={{ color: tab===key ? '#9ab8ff' : '#5a70aa', borderBottomColor: tab===key ? '#9ab8ff' : 'transparent', fontWeight: tab===key ? 700 : 400 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+            {user.photoURL && <img src={user.photoURL} style={{ width:22, height:22, borderRadius:'50%', border:'1.5px solid #4a67c8' }} />}
+            <span style={{ fontSize:'0.7rem', color:'#7a90cc' }}>{user.displayName?.split(' ')[0]}</span>
+            <button onClick={signOutUser} style={{ background:'none', border:'1px solid rgba(255,255,255,0.15)', borderRadius:6, color:'#7a90cc', fontSize:'0.65rem', padding:'0.2rem 0.5rem', cursor:'pointer', fontFamily:"'Heebo',sans-serif" }}>יציאה</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ══ BODY ══ */}
+      <div style={{ maxWidth:1080, margin:'0 auto', padding:'1.2rem 1rem' }}>
+
+        {/* ─── TAB: מעקב ─── */}
+        {tab === 'midrash' && <>
+
+          {/* Goal bar */}
+          <div style={{ background:'#fff', border:'1.5px solid #d8e0f0', borderRadius:12, padding:'0.8rem 1.2rem', marginBottom:'1.2rem', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'0.5rem', boxShadow:'0 1px 6px rgba(30,45,90,0.06)' }}>
+            {targetObj ? (<>
+              <div style={{ fontSize:'0.86rem', color:'#3a4f7a' }}>
+                🎯 יעד: סיום עד גיל <span style={{ color:'#2a40a0', fontWeight:700 }}>{targetObj.age}</span> ·{' '}
+                <span style={{ color:'#5a70aa' }}>
+                  {targetObj.hebrewLabel || (() => { try { return new Intl.DateTimeFormat('he-IL-u-ca-hebrew', { day:'numeric', month:'long', year:'numeric' }).format(new Date(targetObj.date)); } catch(e) { return new Date(targetObj.date).toLocaleDateString('he-IL'); } })()}
+                </span>{' '}·{' '}
+                <span style={{ color:'#2a40a0', fontWeight:700 }}>{remaining}</span> פרשיות נותרו
+              </div>
+              <div style={{ fontSize:'0.82rem', color:'#3a4f7a' }}>קצב נדרש: <span style={{ color:'#1a7a50', fontWeight:700 }}>{parshaPerWeek} פרשיות בשבוע</span></div>
+            </>) : (
+              <div style={{ fontSize:'0.86rem', color:'#7a8aaa', fontStyle:'italic' }}>
+                אז מה היעד שלך?{' '}
+                <span style={{ color:'#4a67c8', cursor:'pointer', fontStyle:'normal', fontWeight:600 }} onClick={() => setTab('target')}>הגדר עכשיו ←</span>
+              </div>
+            )}
+          </div>
+
+          {/* Search */}
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  חפש ספר..."
+            style={{ width:'100%', background:'#fff', border:'1.5px solid #d8e0f0', borderRadius:10, padding:'0.65rem 1rem', color:'#1a2340', fontFamily:"'Heebo',sans-serif", fontSize:'0.92rem', marginBottom:'1.2rem', direction:'rtl', boxShadow:'0 1px 4px rgba(30,45,90,0.05)' }}
+          />
+
+          {/* Groups */}
+          {GROUPS.map(grp => {
+            const filtered = grp.books.filter(b => !search || b.name.includes(search));
+            if (!filtered.length) return null;
+            const grpL = filtered.reduce((s, b) => s + countBook(b.id, b.n), 0);
+            const grpT = filtered.reduce((s, b) => s + b.n, 0);
+            return (
+              <div key={grp.name} style={{ marginBottom:'2rem' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'0.8rem', marginBottom:'0.9rem', paddingBottom:'0.45rem', borderBottom:'2px solid #d8e0f0' }}>
+                  <span style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'0.95rem', fontWeight:700, color:'#2e4080' }}>{grp.name}</span>
+                  <span style={{ fontSize:'0.68rem', color:'#7a8aaa', background:'#eef1ff', padding:'0.1rem 0.5rem', borderRadius:20 }}>{grpL}/{grpT}</span>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:'0.8rem' }}>
+                  {filtered.map(book => {
+                    const cnt = countBook(book.id, book.n);
+                    const tPct = Math.round((cnt / book.n) * 100);
+                    const isComplete = cnt === book.n;
+                    const isOpen = openCards[book.id];
+                    return (
+                      <div key={book.id} style={{ background:'#fff', border:'1.5px solid ' + (isComplete ? '#4a67c8' : '#d8e0f0'), borderRadius:12, overflow:'hidden', boxShadow:'0 2px 8px rgba(30,45,90,0.06)' }}>
+
+                        {/* Card header */}
+                        <div className="thdr" onClick={() => setOpenCards(o => ({ ...o, [book.id]: !o[book.id] }))}
+                          style={{ padding:'0.8rem 1rem 0.65rem', display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', userSelect:'none' }}>
+                          <span style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'1.05rem', fontWeight:700, color: isComplete ? '#4a67c8' : '#1a2340' }}>{book.name}</span>
+                          <div style={{ display:'flex', alignItems:'center', gap:'0.45rem' }}>
+                            <a href={'https://www.sefaria.org/' + book.sid} target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              style={{ fontSize:'0.6rem', textDecoration:'none', color:'#4a67c8', background:'#eef1ff', border:'1px solid #c0ccf0', borderRadius:4, padding:'0.1rem 0.3rem', fontFamily:"'Heebo',sans-serif", fontWeight:600 }}>ספריא</a>
+                            <a href={wkUrl(book.ws)} target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              style={{ fontSize:'0.6rem', textDecoration:'none', color:'#4a67c8', background:'#eef1ff', border:'1px solid #c0ccf0', borderRadius:4, padding:'0.1rem 0.3rem', fontFamily:"'Heebo',sans-serif", fontWeight:600 }}>ויקיטקסט</a>
+                            {isComplete && <span style={{ background:'#eef1ff', color:'#4a67c8', border:'1px solid #4a67c8', fontSize:'0.58rem', fontWeight:700, padding:'0.1rem 0.35rem', borderRadius:5 }}>✓ הושלם</span>}
+                            <span style={{ fontSize:'0.72rem', color:'#7a8aaa' }}>{cnt}/{book.n}</span>
+                            <span style={{ fontSize:'0.58rem', color:'#7a8aaa', display:'inline-block', transition:'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+                          </div>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div style={{ height:4, background:'#eef1f8' }}>
+                          <div style={{ height:'100%', width:tPct+'%', background:'linear-gradient(90deg,#4a67c8,#80a0f0)', transition:'width 0.4s' }} />
+                        </div>
+
+                        {/* Parshiyot grid */}
+                        {isOpen && (
+                          <div style={{ padding:'0.8rem', background:'#f7f9ff', borderTop:'1px solid #eef1f8' }}>
+                            <div style={{ display:'flex', gap:'0.5rem', marginBottom:'0.7rem', alignItems:'center' }}>
+                              <button className="mbtn" style={{ background:'#eef1ff', color:'#2e4080', border:'1.5px solid #4a67c8' }} onClick={e => { e.stopPropagation(); markAll(book.id, book.n); }}>✓ סמן הכל</button>
+                              {cnt > 0 && <button className="mbtn" style={{ background:'#fff0f0', color:'#8b2020', border:'1.5px solid #e8b0b0' }} onClick={e => { e.stopPropagation(); unmarkAll(book.id, book.n); }}>✕ נקה הכל</button>}
+                              <span style={{ fontSize:'0.68rem', color:'#7a8aaa', marginRight:'auto' }}>{tPct}% · {book.n} פרשיות</span>
+                            </div>
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                              {Array.from({ length: book.n }, (_, i) => i + 1).map(num => {
+                                const k = pk(book.id, num);
+                                const isL = !!learned[k];
+                                return (
+                                  <div key={k} className={'par-cell' + (isL ? ' learned' : '') + (flash === k ? ' flash' : '')}
+                                    onClick={() => togglePar(book.id, num)}
+                                    title={book.name + ' פרשה ' + HEB[num]}>
+                                    <span className="par-num">{HEB[num]}</span>
+                                    <a className="par-sflink"
+                                      href={sfUrl(book.sid, num)} target="_blank" rel="noopener noreferrer"
+                                      onClick={e => e.stopPropagation()} title="פתח בספריא">ס׳</a>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </>}
+
+        {/* ─── TAB: יעד ─── */}
+        {tab === 'target' && (() => {
+          const birthDateObj = (birthInput && birthInput.split('-').filter(Boolean).length === 3) ? new Date(birthInput) : null;
+          const targetYear = birthDateObj ? birthDateObj.getFullYear() + Number(ageInput) : null;
+          const bdayResult = (birthDateObj && ageInput) ? hebrewBirthdayInYear(birthDateObj, targetYear) : null;
+          const computedDate = bdayResult ? bdayResult.gregorian : null;
+          const hebrewDate = bdayResult ? bdayResult.hebrew : null;
+
+          return (
+            <div style={{ maxWidth:500, margin:'0 auto' }}>
+              <div style={{ background:'#fff', border:'1.5px solid #d8e0f0', borderRadius:16, padding:'2rem', boxShadow:'0 2px 12px rgba(30,45,90,0.08)', textAlign:'center' }}>
+                <div style={{ fontSize:'2.5rem', marginBottom:'0.8rem' }}>🎯</div>
+                <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'1.3rem', fontWeight:700, color:'#2e4080', marginBottom:'0.3rem' }}>
+                  באיזה גיל היית רוצה לסיים את מדרש רבה?
+                </div>
+                <div style={{ fontSize:'0.82rem', color:'#7a8aaa', marginBottom:'1.8rem' }}>
+                  {targetObj ? 'תמיד אפשר לעדכן' : 'נחשב יחד את הקצב הנדרש'}
+                </div>
+                {targetObj && (
+                  <div style={{ background:'#eef1ff', border:'1.5px solid #c0ccf0', borderRadius:12, padding:'1rem', marginBottom:'1.5rem' }}>
+                    <div style={{ fontSize:'0.75rem', color:'#5a70aa', marginBottom:'0.3rem' }}>היעד שלך</div>
+                    <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'1.3rem', fontWeight:700, color:'#2a40a0' }}>סיום עד גיל {targetObj.age}</div>
+                    <div style={{ fontSize:'0.82rem', color:'#5a70aa', marginTop:'0.2rem' }}>
+                      {targetObj.hebrewLabel || (() => { try { return new Intl.DateTimeFormat('he-IL-u-ca-hebrew', { day:'numeric', month:'long', year:'numeric' }).format(new Date(targetObj.date)); } catch(e) { return ''; } })()}
+                    </div>
+                  </div>
+                )}
+                <div style={{ display:'flex', flexDirection:'column', gap:'1rem', marginBottom:'1.2rem', textAlign:'right' }}>
+                  <div>
+                    <div style={{ fontSize:'0.8rem', color:'#5a70aa', marginBottom:'0.3rem', fontWeight:600 }}>גיל יעד לסיום</div>
+                    <input type="number" min="20" max="120" value={ageInput} onChange={e => setAgeInput(e.target.value)}
+                      placeholder="למשל: 50"
+                      style={{ width:'100%', border:'1.5px solid #d8e0f0', borderRadius:8, padding:'0.65rem 0.9rem', fontFamily:"'Heebo',sans-serif", fontSize:'1rem', color:'#1a2340', textAlign:'center', boxSizing:'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize:'0.8rem', color:'#5a70aa', marginBottom:'0.3rem', fontWeight:600 }}>תאריך לידה</div>
+                    <div style={{ display:'flex', gap:'0.5rem', direction:'rtl' }}>
+                      <select value={birthInput.split('-')[2] || ''} onChange={e => {
+                        const p = birthInput.split('-');
+                        setBirthInput((p[0]||'2000') + '-' + (p[1]||'01') + '-' + e.target.value.padStart(2,'0'));
+                      }} style={{ flex:1, border:'1.5px solid #d8e0f0', borderRadius:8, padding:'0.6rem 0.4rem', fontFamily:"'Heebo',sans-serif", fontSize:'0.95rem', color:'#1a2340' }}>
+                        <option value="">יום</option>
+                        {Array.from({length:31},(_,i)=>i+1).map(d => <option key={d} value={String(d).padStart(2,'0')}>{d}</option>)}
+                      </select>
+                      <select value={birthInput.split('-')[1] || ''} onChange={e => {
+                        const p = birthInput.split('-');
+                        setBirthInput((p[0]||'2000') + '-' + e.target.value + '-' + (p[2]||'01'));
+                      }} style={{ flex:2, border:'1.5px solid #d8e0f0', borderRadius:8, padding:'0.6rem 0.4rem', fontFamily:"'Heebo',sans-serif", fontSize:'0.95rem', color:'#1a2340' }}>
+                        <option value="">חודש</option>
+                        {['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'].map((mn,i) => <option key={i+1} value={String(i+1).padStart(2,'0')}>{mn}</option>)}
+                      </select>
+                      <select value={birthInput.split('-')[0] || ''} onChange={e => {
+                        const p = birthInput.split('-');
+                        setBirthInput(e.target.value + '-' + (p[1]||'01') + '-' + (p[2]||'01'));
+                      }} style={{ flex:2, border:'1.5px solid #d8e0f0', borderRadius:8, padding:'0.6rem 0.4rem', fontFamily:"'Heebo',sans-serif", fontSize:'0.95rem', color:'#1a2340' }}>
+                        <option value="">שנה</option>
+                        {Array.from({length:80},(_,i)=>2010-i).map(y => <option key={y} value={y}>{y}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                {computedDate && (
+                  <div style={{ fontSize:'0.85rem', color:'#3a4f7a', marginBottom:'1.2rem', background:'#f7f9ff', borderRadius:8, padding:'0.6rem' }}>
+                    תאריך יעד מחושב: <strong>{hebrewDate}</strong>
+                  </div>
+                )}
+                <button onClick={async () => {
+                  if (!ageInput || !birthInput) return;
+                  const bd = new Date(birthInput);
+                  const ty = bd.getFullYear() + Number(ageInput);
+                  const bday = hebrewBirthdayInYear(bd, ty);
+                  const d = bday ? bday.gregorian : new Date(bd.getFullYear() + Number(ageInput), bd.getMonth(), bd.getDate());
+                  const obj = { age: Number(ageInput), birth: birthInput, date: d.toISOString(), hebrewLabel: bday ? bday.hebrew : null };
+                  const val = JSON.stringify(obj);
+                  setTargetDate(val);
+                  await fbSave(user.uid, 'midrash-target', val);
+                  setTab('midrash');
+                }} style={{ background:'#2a40a0', color:'#fff', border:'none', borderRadius:8, padding:'0.7rem 2rem', fontFamily:"'Heebo',sans-serif", fontWeight:700, fontSize:'0.95rem', cursor:'pointer', width:'100%', marginBottom:'0.8rem' }}>
+                  {targetObj ? 'עדכן יעד' : 'הגדר יעד'}
+                </button>
+                {targetObj && (
+                  <button onClick={async () => {
+                    setTargetDate(null); setAgeInput(''); setBirthInput('');
+                    await fbSave(user.uid, 'midrash-target', '');
+                  }} style={{ background:'none', border:'none', color:'#aab4cc', fontSize:'0.72rem', cursor:'pointer', fontFamily:"'Heebo',sans-serif" }}>
+                    הסר יעד
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ─── TAB: יומן ─── */}
+        {tab === 'journal' && (
+          <div style={{ maxWidth:660, margin:'0 auto' }}>
+            <div style={{ marginBottom:'1.2rem' }}>
+              <div style={{ fontFamily:"'Frank Ruhl Libre',serif", fontSize:'1.15rem', fontWeight:700, color:'#2e4080', marginBottom:'0.2rem' }}>יומן למידה</div>
+              <div style={{ fontSize:'0.8rem', color:'#7a8aaa' }}>רשום היכן הגעת, מה חידשת, מה רצית לזכור</div>
+            </div>
+            <div style={{ background:'#fff', border:'1.5px solid #d8e0f0', borderRadius:12, padding:'1rem', marginBottom:'1.2rem', boxShadow:'0 2px 8px rgba(30,45,90,0.06)' }}>
+              <textarea value={newEntry} onChange={e => setNewEntry(e.target.value)}
+                placeholder={"הגעתי עד...\nחידוש שראיתי...\nרעיון שרציתי לזכור..."}
+                style={{ width:'100%', minHeight:85, background:'#f2f5fc', border:'1.5px solid #d8e0f0', borderRadius:8, color:'#1a2340', fontFamily:"'Heebo',sans-serif", fontSize:'0.9rem', padding:'0.75rem', resize:'vertical', direction:'rtl', lineHeight:1.65 }}
+              />
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'0.6rem' }}>
+                <span style={{ fontSize:'0.7rem', color:'#7a8aaa' }}>היום: {today()}</span>
+                <button onClick={addEntry} style={{ background:'#2a40a0', color:'#fff', border:'none', borderRadius:8, padding:'0.48rem 1.1rem', fontFamily:"'Heebo',sans-serif", fontWeight:700, fontSize:'0.85rem', cursor:'pointer' }}>+ הוסף</button>
+              </div>
+            </div>
+            {journal.length === 0 && (
+              <div style={{ textAlign:'center', color:'#7a8aaa', padding:'2.5rem', fontSize:'0.88rem' }}>
+                <div style={{ fontSize:'2rem', marginBottom:'0.5rem' }}>📝</div>
+                עדיין אין רשומות · התחל לכתוב!
+              </div>
+            )}
+            {journal.map((entry, idx) => (
+              <div key={entry.id} className="journal-entry">
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.45rem' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'0.55rem' }}>
+                    <span style={{ background:'#eef1ff', color:'#2e4080', fontFamily:"'Frank Ruhl Libre',serif", fontWeight:700, fontSize:'0.78rem', padding:'0.08rem 0.4rem', borderRadius:6 }}>{idx+1}</span>
+                    <span style={{ fontSize:'0.7rem', color:'#7a8aaa' }}>{entry.date}</span>
+                  </div>
+                  <div className="entry-actions">
+                    <button className="entry-btn" onClick={() => { setEditingId(entry.id); setEditText(entry.text); }}>✏️</button>
+                    <button className="entry-btn del" onClick={() => deleteEntry(entry.id)}>🗑</button>
+                  </div>
+                </div>
+                {editingId === entry.id ? (
+                  <div>
+                    <textarea value={editText} onChange={e => setEditText(e.target.value)}
+                      style={{ width:'100%', minHeight:75, background:'#f2f5fc', border:'1.5px solid #d8e0f0', borderRadius:8, color:'#1a2340', fontFamily:"'Heebo',sans-serif", fontSize:'0.88rem', padding:'0.65rem', resize:'vertical', direction:'rtl' }} />
+                    <div style={{ display:'flex', gap:'0.5rem', marginTop:'0.5rem', justifyContent:'flex-end' }}>
+                      <button onClick={() => setEditingId(null)} style={{ background:'#eef1ff', border:'1px solid #d8e0f0', color:'#3a4f7a', padding:'0.32rem 0.75rem', borderRadius:7, cursor:'pointer', fontSize:'0.8rem', fontFamily:"'Heebo',sans-serif" }}>ביטול</button>
+                      <button onClick={() => saveEdit(entry.id)} style={{ background:'#2a40a0', color:'#fff', border:'none', padding:'0.32rem 0.85rem', borderRadius:7, cursor:'pointer', fontSize:'0.8rem', fontFamily:"'Heebo',sans-serif", fontWeight:700 }}>שמור</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize:'0.9rem', lineHeight:1.72, color:'#1a2340', whiteSpace:'pre-wrap' }}>{entry.text}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+      </div>
+
+      <div style={{ textAlign:'right', padding:'0.5rem 1.5rem', fontSize:'0.65rem', color:'#aab4cc' }}>
+        נוצר ע"י עמיחי צדוק
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
