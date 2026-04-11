@@ -511,47 +511,14 @@ function App() {
                               {cnt > 0 && <button className="mbtn" style={{ background:'#fff0f0', color:'#8b2020', border:'1.5px solid #e8b0b0' }} onClick={e => { e.stopPropagation(); unmarkAll(book.id, book.n); }}>✕ נקה הכל</button>}
                               <span style={{ fontSize:'0.68rem', color:'#7a8aaa', marginRight:'auto' }}>{tPct}% · {isBereishit ? bookTotal+' קטעים' : book.n+' פרשיות'}</span>
                             </div>
-                            {/* גריד פרשיות */}
-                            <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-                              {Array.from({ length: book.n }, (_, i) => i + 1).map(num => {
-                                const hasSections = book.id === 'bereishit';
-                                const secCount = hasSections ? BEREISHIT_SECTIONS[num-1] : 0;
-                                const k = pk(book.id, num);
-                                const isL = hasSections
-                                  ? (secCount > 0 && Array.from({length: secCount}, (_,si) => pkSec(book.id, num, si+1)).every(sk => !!learned[sk]))
-                                  : !!learned[k];
-                                const parOpen = openParshas[book.id + '_' + num];
-                                return (
-                                  <div
-                                    key={k}
-                                    className={'par-cell' + (isL ? ' learned' : '') + (flash === k ? ' flash' : '') + (parOpen ? ' learned' : '')}
-                                    style={{ outline: parOpen ? '2px solid #2a40a0' : 'none' }}
-                                    onClick={() => {
-                                      if (hasSections) {
-                                        setOpenParshas(o => ({ ...o, [book.id+'_'+num]: !o[book.id+'_'+num] }));
-                                      } else {
-                                        togglePar(book.id, num);
-                                      }
-                                    }}
-                                    title={book.name + ' פרשה ' + HEB[num] + (hasSections ? ' · ' + secCount + ' קטעים' : '')}>
-                                    <span className="par-num">{HEB[num]}</span>
-                                    {hasSections
-                                      ? <span style={{ fontSize:'0.38rem', color: isL ? '#4a67c8' : '#b0bcdc', lineHeight:1 }}>{secCount}קט׳</span>
-                                      : <a className="par-sflink" href={sfUrl(book.sid, num)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>ס׳</a>
-                                    }
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {/* קטעים — נפתחים מתחת לגריד */}
+                            {/* קטעים — נפתחים לפני הגריד */}
                             {book.id === 'bereishit' && (() => {
                               const openNum = Object.keys(openParshas).find(k => k.startsWith('bereishit_') && openParshas[k]);
                               if (!openNum) return null;
                               const num = parseInt(openNum.replace('bereishit_', ''));
                               const secCount = BEREISHIT_SECTIONS[num - 1];
                               return (
-                                <div style={{ marginTop:8, background:'#eef1ff', borderRadius:10, padding:'0.7rem', border:'1.5px solid #c0ccf0' }}>
+                                <div style={{ marginBottom:10, background:'#eef1ff', borderRadius:10, padding:'0.7rem', border:'1.5px solid #c0ccf0' }}>
                                   <div style={{ fontSize:'0.75rem', color:'#2e4080', fontWeight:700, marginBottom:'0.5rem', fontFamily:"'Frank Ruhl Libre',serif" }}>
                                     פרשה {HEB[num]} · {secCount} קטעים
                                     <a href={sfUrl(book.sid, num)} target="_blank" rel="noopener noreferrer"
@@ -595,6 +562,40 @@ function App() {
                                 </div>
                               );
                             })()}
+
+                            {/* גריד פרשיות */}
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                              {Array.from({ length: book.n }, (_, i) => i + 1).map(num => {
+                                const hasSections = book.id === 'bereishit';
+                                const secCount = hasSections ? BEREISHIT_SECTIONS[num-1] : 0;
+                                const k = pk(book.id, num);
+                                const isL = hasSections
+                                  ? (secCount > 0 && Array.from({length: secCount}, (_,si) => pkSec(book.id, num, si+1)).every(sk => !!learned[sk]))
+                                  : !!learned[k];
+                                const parOpen = openParshas[book.id + '_' + num];
+                                return (
+                                  <div
+                                    key={k}
+                                    className={'par-cell' + (isL ? ' learned' : '') + (flash === k ? ' flash' : '') + (parOpen ? ' learned' : '')}
+                                    style={{ outline: parOpen ? '2px solid #2a40a0' : 'none' }}
+                                    onClick={() => {
+                                      if (hasSections) {
+                                        setOpenParshas(o => ({ ...o, [book.id+'_'+num]: !o[book.id+'_'+num] }));
+                                      } else {
+                                        togglePar(book.id, num);
+                                      }
+                                    }}
+                                    title={book.name + ' פרשה ' + HEB[num] + (hasSections ? ' · ' + secCount + ' קטעים' : '')}>
+                                    <span className="par-num">{HEB[num]}</span>
+                                    {hasSections
+                                      ? <span style={{ fontSize:'0.38rem', color: isL ? '#4a67c8' : '#b0bcdc', lineHeight:1 }}>{secCount}קט׳</span>
+                                      : <a className="par-sflink" href={sfUrl(book.sid, num)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>ס׳</a>
+                                    }
+                                  </div>
+                                );
+                              })}
+                            </div>
+
                           </div>
                         )}
                       </div>
