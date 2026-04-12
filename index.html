@@ -116,14 +116,23 @@ const GROUPS = [
   }
 ];
 const ALL_BOOKS = GROUPS.flatMap(g => g.books);
-// בראשית רבה — סופרים קטעים (1036), שאר הספרים — פרשיות
-const BEREISHIT_TOTAL_SEC = 1036;
-const TOTAL = BEREISHIT_TOTAL_SEC + ALL_BOOKS.filter(b => b.id !== 'bereishit').reduce((s,b) => s+b.n, 0);
 
 const HEB = ['','א','ב','ג','ד','ה','ו','ז','ח','ט','י','יא','יב','יג','יד','טו','טז','יז','יח','יט','כ','כא','כב','כג','כד','כה','כו','כז','כח','כט','ל','לא','לב','לג','לד','לה','לו','לז','לח','לט','מ','מא','מב','מג','מד','מה','מו','מז','מח','מט','נ','נא','נב','נג','נד','נה','נו','נז','נח','נט','ס','סא','סב','סג','סד','סה','סו','סז','סח','סט','ע','עא','עב','עג','עד','עה','עו','עז','עח','עט','פ','פא','פב','פג','פד','פה','פו','פז','פח','פט','צ','צא','צב','צג','צד','צה','צו','צז','צח','צט','ק'];
 
-/* מספר קטעים בכל פרשה — בראשית רבה (מ-Sefaria API) */
+/* מספר קטעים בכל פרשה — מ-Sefaria API */
 const BEREISHIT_SECTIONS = [15,5,9,7,10,9,5,13,14,9,10,16,17,10,7,6,8,6,12,12,9,13,7,7,3,7,4,9,5,10,14,11,7,15,3,8,8,14,16,6,10,8,9,23,10,13,10,21,14,12,11,13,15,6,8,11,4,9,12,16,7,4,14,10,23,7,13,14,8,20,10,6,12,17,13,9,3,16,8,12,5,15,5,22,14,6,10,7,9,6,11,9,12,9,4,5,6,20,12,13];
+const SHEMOT_SECTIONS   = [36,6,17,4,23,5,5,3,13,7,6,7,7,4,31,4,5,12,8,19,11,3,15,4,12,3,9,6,9,24,17,9,8,3,6,4,4,9,1,4,7,9,9,10,6,5,9,6,2,5,8,5];
+const VAYIKRA_SECTIONS  = [15,12,7,8,8,6,6,4,9,9,9,5,5,9,9,9,7,5,6,12,12,10,13,9,8,9,12,6,12,16,11,8,6,16,12,6,4];
+
+const BOOK_SECTIONS = { bereishit: BEREISHIT_SECTIONS, shemot: SHEMOT_SECTIONS, vayikra: VAYIKRA_SECTIONS };
+
+const BOOK_TOTALS = {
+  bereishit: BEREISHIT_SECTIONS.reduce((a,b)=>a+b,0),
+  shemot:    SHEMOT_SECTIONS.reduce((a,b)=>a+b,0),
+  vayikra:   VAYIKRA_SECTIONS.reduce((a,b)=>a+b,0),
+};
+
+const TOTAL = ALL_BOOKS.reduce((s,b) => s + (BOOK_TOTALS[b.id] || b.n), 0);
 
 const QUOTE = 'רְצוֹנְךָ לְהַכִּיר אֶת מִי שֶׁאָמַר וְהָיָה הָעוֹלָם — לְמַד הַגָּדָה, שֶׁמִּתּוֹכָהּ אַתָּה מַכִּיר אֶת הַקָּדוֹשׁ בָּרוּךְ הוּא וּמִתְדַּבֵּק בִּדְרָכָיו.';
 const QUOTE_SRC = '— ספרי דברים, פיסקא מ״ט';
@@ -255,7 +264,7 @@ function App() {
 
   function markAll(bookId, n) {
     const nl = { ...learned };
-    const sections = bookId === 'bereishit' ? BEREISHIT_SECTIONS : null;
+    const sections = BOOK_SECTIONS[bookId] || null;
     for (let i = 1; i <= n; i++) {
       if (sections) {
         for (let s = 1; s <= sections[i-1]; s++) nl[pkSec(bookId, i, s)] = true;
@@ -269,7 +278,7 @@ function App() {
 
   function unmarkAll(bookId, n) {
     const nl = { ...learned };
-    const sections = bookId === 'bereishit' ? BEREISHIT_SECTIONS : null;
+    const sections = BOOK_SECTIONS[bookId] || null;
     for (let i = 1; i <= n; i++) {
       if (sections) {
         for (let s = 1; s <= sections[i-1]; s++) delete nl[pkSec(bookId, i, s)];
@@ -282,11 +291,11 @@ function App() {
   }
 
   function countBook(bookId, n) {
+    const sections = BOOK_SECTIONS[bookId];
     let c = 0;
-    if (bookId === 'bereishit') {
-      // סופר קטעים שנלמדו
+    if (sections) {
       for (let i = 1; i <= n; i++)
-        for (let s = 1; s <= BEREISHIT_SECTIONS[i-1]; s++)
+        for (let s = 1; s <= sections[i-1]; s++)
           if (learned[pkSec(bookId, i, s)]) c++;
     } else {
       for (let i = 1; i <= n; i++) if (learned[pk(bookId, i)]) c++;
@@ -295,11 +304,11 @@ function App() {
   }
 
   function countBookParshas(bookId, n) {
-    // כמה פרשיות הושלמו (כל קטעיהן) — לתצוגה בלבד
-    if (bookId !== 'bereishit') return countBook(bookId, n);
+    const sections = BOOK_SECTIONS[bookId];
+    if (!sections) return countBook(bookId, n);
     let c = 0;
     for (let i = 1; i <= n; i++) {
-      const total = BEREISHIT_SECTIONS[i-1];
+      const total = sections[i-1];
       let done = 0;
       for (let s = 1; s <= total; s++) if (learned[pkSec(bookId, i, s)]) done++;
       if (done === total) c++;
@@ -476,9 +485,9 @@ function App() {
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:'0.8rem' }}>
                   {filtered.map(book => {
-                    const isBereishit = book.id === 'bereishit';
+                    const bookSections = BOOK_SECTIONS[book.id] || null;
                     const cnt = countBook(book.id, book.n);
-                    const bookTotal = isBereishit ? BEREISHIT_TOTAL_SEC : book.n;
+                    const bookTotal = BOOK_TOTALS[book.id] || book.n;
                     const tPct = Math.round((cnt / bookTotal) * 100);
                     const isComplete = cnt === bookTotal;
                     const isOpen = openCards[book.id];
@@ -513,14 +522,14 @@ function App() {
                             <div style={{ display:'flex', gap:'0.5rem', marginBottom:'0.7rem', alignItems:'center' }}>
                               <button className="mbtn" style={{ background:'#eef1ff', color:'#2e4080', border:'1.5px solid #4a67c8' }} onClick={e => { e.stopPropagation(); markAll(book.id, book.n); }}>✓ סמן הכל</button>
                               {cnt > 0 && <button className="mbtn" style={{ background:'#fff0f0', color:'#8b2020', border:'1.5px solid #e8b0b0' }} onClick={e => { e.stopPropagation(); unmarkAll(book.id, book.n); }}>✕ נקה הכל</button>}
-                              <span style={{ fontSize:'0.68rem', color:'#7a8aaa', marginRight:'auto' }}>{tPct}% · {isBereishit ? bookTotal+' קטעים' : book.n+' פרשיות'}</span>
+                              <span style={{ fontSize:'0.68rem', color:'#7a8aaa', marginRight:'auto' }}>{tPct}% · {bookSections ? bookTotal+' קטעים' : book.n+' פרשיות'}</span>
                             </div>
                             {/* קטעים — נפתחים לפני הגריד */}
-                            {book.id === 'bereishit' && (() => {
-                              const openNum = Object.keys(openParshas).find(k => k.startsWith('bereishit_') && openParshas[k]);
+                            {bookSections && (() => {
+                              const openNum = Object.keys(openParshas).find(k => k.startsWith(book.id+'_') && openParshas[k]);
                               if (!openNum) return null;
-                              const num = parseInt(openNum.replace('bereishit_', ''));
-                              const secCount = BEREISHIT_SECTIONS[num - 1];
+                              const num = parseInt(openNum.replace(book.id+'_', ''));
+                              const secCount = bookSections[num - 1];
                               return (
                                 <div style={{ marginBottom:10, background:'#eef1ff', borderRadius:10, padding:'0.7rem', border:'1.5px solid #c0ccf0' }}>
                                   <div style={{ fontSize:'0.75rem', color:'#2e4080', fontWeight:700, marginBottom:'0.5rem', fontFamily:"'Frank Ruhl Libre',serif" }}>
@@ -530,7 +539,7 @@ function App() {
                                   </div>
                                   <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                                     {Array.from({length: secCount}, (_,si) => si+1).map(sec => {
-                                      const sk = pkSec('bereishit', num, sec);
+                                      const sk = pkSec(book.id, num, sec);
                                       const isLS = !!learned[sk];
                                       return (
                                         <div key={sk}
@@ -570,8 +579,8 @@ function App() {
                             {/* גריד פרשיות */}
                             <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                               {Array.from({ length: book.n }, (_, i) => i + 1).map(num => {
-                                const hasSections = book.id === 'bereishit';
-                                const secCount = hasSections ? BEREISHIT_SECTIONS[num-1] : 0;
+                                const hasSections = !!bookSections;
+                                const secCount = hasSections ? bookSections[num-1] : 0;
                                 const k = pk(book.id, num);
                                 const isL = hasSections
                                   ? (secCount > 0 && Array.from({length: secCount}, (_,si) => pkSec(book.id, num, si+1)).every(sk => !!learned[sk]))
